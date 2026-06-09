@@ -1,0 +1,29 @@
+# Hadolint config — Dockerfile linter
+# Docs: https://github.com/hadolint/hadolint#configure
+# Failure threshold is set in CI workflow (warning level).
+
+ignored:
+  # DL3018 — Pin versions in apk add
+  # We DO pin with `pkg=~MAJOR.MINOR` (fuzzy match), but hadolint only
+  # recognizes exact-match pins. Acceptable trade-off for security patches.
+  - DL3018
+
+  # DL3059 — Multiple consecutive RUN instructions
+  # We intentionally split runtime libs (RUN 1) from build-deps (RUN 2)
+  # so the build-deps layer can be purged with apk del .build-deps.
+  - DL3059
+
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+
+# Treat all remaining issues as errors by default; CI lets warnings through.
+override:
+  error:
+    - DL3000  # Use absolute WORKDIR
+    - DL3002  # Last USER should not be root
+    - DL3003  # Use WORKDIR to switch to a directory
+    - DL3004  # Do not use sudo
+    - DL3020  # Use COPY instead of ADD
+    - DL3025  # JSON form for CMD/ENTRYPOINT
+    - DL4006  # Set the SHELL option -o pipefail before RUN with pipe

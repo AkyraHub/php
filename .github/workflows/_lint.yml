@@ -1,0 +1,21 @@
+name: _lint (reusable)
+
+# Reusable workflow for Dockerfile linting.
+# Called from ci.yml via `uses: ./.github/workflows/_lint.yml`.
+on:
+  workflow_call:
+
+jobs:
+  hadolint:
+    name: Hadolint (Dockerfile lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+          config: .hadolint.yaml
+          failure-threshold: warning
+          format: tty

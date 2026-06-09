@@ -1,0 +1,122 @@
+name: _build-scan-push (reusable)
+
+# Reusable workflow that:
+#   1. Builds the image for linux/amd64 (loadable locally for Trivy scan)
+#   2. Scans the image with Trivy (CRITICAL + HIGH = block)
+#   3. On push/tag events: builds multi-arch (amd64 + arm64) and pushes to GHCR
+#
+# Build/scan/push stay coupled in a single job because they share:
+#   - the Docker daemon (the scan image must be loaded locally)
+#   - the buildx cache (amd64 layers from scan-build are reused by multi-arch push)
+#
+# Splitting them across jobs would require upload-artifact/download-artifact
+# round-trips for the tarball, adding ~30-60s and storage costs.
+on:
+  workflow_call:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: akyrahub/php
+
+jobs:
+  build-and-scan:
+    name: Build + Trivy scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      - name: Set up QEMU (multi-arch)
+        uses: docker/setup-qemu-action@v4.1.0
+        with:
+          platforms: linux/amd64,linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.1.0
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagging scheme:
+      # - push trunk: floating tags 8, 8.5, 8.5.5-alpine3.23
+      # - tag v*.*.*: version tag + full discriminant
+      # Never :latest (project decision).
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6.1.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{version}}-php8.5.5-alpine3.23
+            type=raw,value=8,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') }}
+            type=raw,value=8.5,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') }}
+            type=raw,value=8.5.5-alpine3.23,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') }}
+          labels: |
+            org.opencontainers.image.title=php
+            org.opencontainers.image.description=Minimal PHP-FPM base image for AkyraHub projects
+
+      # Build single-arch (amd64) + load locally for Trivy scan.
+      # This also validates the Dockerfile compiles. The cache it produces is
+      # reused by the multi-arch push step (only arm64 layers are new there).
+      - name: Build amd64 for scan + Dockerfile validation
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: php:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            IMAGE_VERSION=${{ github.ref_name }}
+
+      - name: Trivy scan (table output for logs)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php:scan
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+
+      - name: Trivy scan (SARIF for Code Scanning)
+        if: always() && github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: php:scan
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: false
+          trivyignores: .trivyignore
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: always() && github.event_name != 'pull_request' && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      # Push multi-arch image only after Trivy passes.
+      # amd64 layers are already in cache from the scan build → only arm64 is new work.
+      - name: Build and push multi-arch
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7.2.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            IMAGE_VERSION=${{ github.ref_name }}

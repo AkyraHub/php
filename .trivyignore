@@ -1,0 +1,18 @@
+# Trivy ignore list for AkyraHub/php
+#
+# Format:
+#   CVE-YYYY-NNNNN
+#
+# CRITICAL/HIGH findings that cannot currently be patched (upstream lag,
+# code-path not used, etc.) must be listed here with a justification block
+# above the CVE. Review the list at every release and remove entries whose
+# upstream fix has landed or whose expiry has passed.
+#
+# Template:
+#   # CVE-YYYY-XXXXX (HIGH) — <package>
+#   # Justification: <why this is not exploitable in our context>
+#   # Reviewed by: <name> on YYYY-MM-DD
+#   # Expires: YYYY-MM-DD (re-evaluate then; remove if upstream patched)
+#   CVE-YYYY-XXXXX
+#
+# No entries yet — to be populated as needed.

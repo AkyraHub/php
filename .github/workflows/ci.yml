@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [trunk]
+  push:
+    branches: [trunk]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+# Cancel in-flight runs on the same ref (PR rebases, push-after-push).
+# Don't cancel runs on trunk/tag (those publish artifacts we want to finish).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    uses: ./.github/workflows/_lint.yml
+    permissions:
+      contents: read
+
+  build-scan-push:
+    needs: lint
+    uses: ./.github/workflows/_build-scan-push.yml
+    permissions:
+      contents: read
+      packages: write       # GHCR push
+      security-events: write # SARIF upload for Code Scanning
+    secrets: inherit
