@@ -13,6 +13,7 @@ LABEL org.opencontainers.image.source="https://github.com/AkyraHub/php" \
 ENV TZ=Europe/Paris
 
 RUN set -eux \
+    && apk upgrade --no-cache \
     && apk add --no-cache \
          bash=~5.3 \
          icu-libs=~76.1 \
