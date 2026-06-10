@@ -1,0 +1,82 @@
+name: Release
+
+# Manually-triggered workflow to create a release tag (vMAJOR.MINOR.PATCH).
+#
+# Run from the GitHub Actions UI → "Release" workflow → "Run workflow" button.
+# The workflow:
+#   1. Validates the version format
+#   2. Verifies the latest CI run on trunk succeeded (hard gate)
+#   3. Refuses if the tag already exists
+#   4. Creates an annotated tag on trunk HEAD and pushes it
+#
+# Pushing the tag triggers ci.yml (on: push: tags: ['v*.*.*']) which builds
+# and publishes the image to GHCR with version tags (X.Y.Z + X.Y.Z-php8.5.5-alpine3.23).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (format: vMAJOR.MINOR.PATCH, e.g. v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write     # required to create + push tags
+  actions: read       # required to read CI run status
+
+jobs:
+  tag-release:
+    name: Tag release ${{ inputs.version }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must match vMAJOR.MINOR.PATCH (e.g. v1.0.0). Got: '${{ inputs.version }}'"
+            exit 1
+          fi
+          echo "Version format OK: ${{ inputs.version }}"
+
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: trunk
+          fetch-depth: 0
+
+      - name: Refuse if tag already exists
+        run: |
+          if git rev-parse "${{ inputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag '${{ inputs.version }}' already exists. Choose a different version."
+            exit 1
+          fi
+          echo "Tag does not exist yet, OK to proceed."
+
+      - name: Verify latest CI run on trunk is green
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          HEAD_SHA=$(git rev-parse HEAD)
+          echo "Checking CI status for trunk HEAD: $HEAD_SHA"
+
+          # Get the conclusion of the latest CI run for this SHA
+          CONCLUSION=$(gh run list \
+            --branch trunk \
+            --workflow ci.yml \
+            --commit "$HEAD_SHA" \
+            --limit 1 \
+            --json conclusion \
+            --jq '.[0].conclusion // "missing"')
+
+          echo "Latest CI conclusion for $HEAD_SHA: $CONCLUSION"
+
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "::error::CI for trunk HEAD ($HEAD_SHA) is not green (status: $CONCLUSION). Refusing to tag. Wait for CI to pass before releasing."
+            exit 1
+          fi
+          echo "CI is green, OK to tag."
+
+      - name: Create and push annotated tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ inputs.version }}" -m "Release ${{ inputs.version }}"
+          git push origin "${{ inputs.version }}"
+          echo "::notice::Tag ${{ inputs.version }} created and pushed. ci.yml will now build and publish to GHCR."
