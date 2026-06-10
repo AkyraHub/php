@@ -1,0 +1,60 @@
+name: 'Trivy post-process'
+description: 'Convert Trivy JSON to table+SARIF, publish summary, upload artifact, fail on CRITICAL/HIGH findings'
+
+inputs:
+  base-name:
+    description: 'Base filename (without extension) for Trivy reports, e.g. "trivy-fs"'
+    required: true
+  scan-name:
+    description: 'Human-readable scan name for summary heading and error messages (e.g. "filesystem scan")'
+    required: true
+  artifact-name:
+    description: 'Name for the uploaded workflow artifact'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Convert JSON to table + SARIF
+      shell: bash
+      run: |
+        trivy convert --format table "${{ inputs.base-name }}.json" | tee "${{ inputs.base-name }}.table.txt"
+        trivy convert --format sarif --output "${{ inputs.base-name }}.sarif" "${{ inputs.base-name }}.json"
+
+    - name: Publish summary
+      if: always()
+      shell: bash
+      run: |
+        {
+          echo "## Trivy ${{ inputs.scan-name }}"
+          echo ""
+          if [ -s "${{ inputs.base-name }}.table.txt" ]; then
+            echo '```'
+            cat "${{ inputs.base-name }}.table.txt"
+            echo '```'
+          else
+            echo "_No CRITICAL or HIGH vulnerabilities found._"
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload reports as artifact
+      if: always()
+      uses: actions/upload-artifact@v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ inputs.base-name }}.json
+          ${{ inputs.base-name }}.sarif
+          ${{ inputs.base-name }}.table.txt
+        retention-days: 30
+        if-no-files-found: ignore
+
+    - name: Fail on CRITICAL/HIGH findings
+      shell: bash
+      run: |
+        count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL" or .Severity == "HIGH")] | length' "${{ inputs.base-name }}.json")
+        if [ "$count" -gt 0 ]; then
+          echo "::error::Found $count CRITICAL/HIGH vulnerabilities in ${{ inputs.scan-name }} — see job summary or download ${{ inputs.artifact-name }} artifact"
+          exit 1
+        fi
+        echo "No CRITICAL/HIGH vulnerabilities found in ${{ inputs.scan-name }}."

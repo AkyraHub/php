@@ -26,5 +26,4 @@ jobs:
     permissions:
       contents: read
       packages: write       # GHCR push
-      security-events: write # SARIF upload for Code Scanning
     secrets: inherit

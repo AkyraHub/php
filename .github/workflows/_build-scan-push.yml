@@ -2,15 +2,16 @@ name: _build-scan-push (reusable)
 
 # Reusable workflow that:
 #   1. Builds the image for linux/amd64 (loadable locally for Trivy scan)
-#   2. Scans the image with Trivy (CRITICAL + HIGH = block)
-#   3. On push/tag events: builds multi-arch (amd64 + arm64) and pushes to GHCR
+#   2. Scans the image with Trivy (CRITICAL + HIGH, fixed-only = block)
+#   3. Post-processes via .github/actions/trivy-postprocess:
+#        - publishes results to GitHub Step Summary (no Code Scanning needed)
+#        - uploads JSON/SARIF/table as workflow artifact (30 days retention)
+#        - fails the job if any CRITICAL/HIGH found
+#   4. On push/tag events: builds multi-arch (amd64 + arm64) and pushes to GHCR
 #
 # Build/scan/push stay coupled in a single job because they share:
 #   - the Docker daemon (the scan image must be loaded locally)
 #   - the buildx cache (amd64 layers from scan-build are reused by multi-arch push)
-#
-# Splitting them across jobs would require upload-artifact/download-artifact
-# round-trips for the tarball, adding ~30-60s and storage costs.
 on:
   workflow_call:
 
@@ -21,7 +22,7 @@ env:
 jobs:
   build-and-scan:
     name: Build + Trivy scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6.0.3
 
@@ -78,32 +79,28 @@ jobs:
           build-args: |
             IMAGE_VERSION=${{ github.ref_name }}
 
-      - name: Trivy scan (table output for logs)
+      # Trivy with exit-code: 0 so we collect the full report regardless of
+      # findings; the trivy-postprocess composite action decides pass/fail
+      # based on CRITICAL/HIGH count (jq).
+      # ignore-unfixed: true → don't block on CVEs without an upstream patch.
+      - name: Run Trivy (image, JSON)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          scan-type: image
           image-ref: php:scan
-          format: table
+          format: json
+          output: trivy-image.json
           severity: CRITICAL,HIGH
-          exit-code: '1'
-          ignore-unfixed: false
+          exit-code: '0'
+          ignore-unfixed: true
           trivyignores: .trivyignore
 
-      - name: Trivy scan (SARIF for Code Scanning)
-        if: always() && github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@v0.36.0
+      - uses: ./.github/actions/trivy-postprocess
+        if: always()
         with:
-          image-ref: php:scan
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: false
-          trivyignores: .trivyignore
-
-      - name: Upload SARIF to GitHub Code Scanning
-        if: always() && github.event_name != 'pull_request' && hashFiles('trivy-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
+          base-name: trivy-image
+          scan-name: php base image scan
+          artifact-name: trivy-image-reports
 
       # Push multi-arch image only after Trivy passes.
       # amd64 layers are already in cache from the scan build → only arm64 is new work.
