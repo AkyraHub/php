@@ -60,8 +60,17 @@ jobs:
             org.opencontainers.image.description=Minimal PHP-FPM base image for AkyraHub projects
 
       # Build single-arch (amd64) + load locally for Trivy scan.
-      # This also validates the Dockerfile compiles. The cache it produces is
-      # reused by the multi-arch push step (only arm64 layers are new there).
+      # This also validates the Dockerfile compiles.
+      #
+      # Freshness policy (hybrid):
+      #   - Pull requests   -> cached build (fast feedback; PR images are never published).
+      #   - push / tag      -> no-cache, so the `RUN apk upgrade` layer is rebuilt and
+      #                        transitive OS CVEs (e.g. openssl) are actually patched in
+      #                        every published image. Without this, a cached apk-upgrade
+      #                        layer can republish a stale (vulnerable) image.
+      # The no-cache build exports fresh layers to the gha cache, which the push step
+      # below then reuses (cache-from) for an essentially instant rebuild — so a publish
+      # event compiles the PHP extensions only once.
       - name: Build amd64 for scan + Dockerfile validation
         uses: docker/build-push-action@v7.2.0
         with:
@@ -70,6 +79,7 @@ jobs:
           push: false
           load: true
           tags: php:scan
+          no-cache: ${{ github.event_name != 'pull_request' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
