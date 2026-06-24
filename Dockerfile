@@ -57,8 +57,12 @@ RUN set -eux \
     && rm -rf /tmp/* /var/cache/apk/*
 
 
-RUN { echo '[global]'; echo 'error_log = /proc/self/fd/2'; } \
-    >> /usr/local/etc/php-fpm.d/zz-docker.conf
+RUN { \
+        echo '[global]'; \
+        echo 'error_log = /proc/self/fd/2'; \
+        echo '[www]'; \
+        echo 'pm.status_path = /status'; \
+    } >> /usr/local/etc/php-fpm.d/zz-docker.conf
 
 USER www-data
 
