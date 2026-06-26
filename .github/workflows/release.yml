@@ -9,8 +9,14 @@ name: Release
 #   3. Refuses if the tag already exists
 #   4. Creates an annotated tag on trunk HEAD and pushes it
 #
-# Pushing the tag triggers ci.yml (on: push: tags: ['v*.*.*']) which builds
+# The tag is pushed with a GitHub App installation token (NOT the default
+# GITHUB_TOKEN) — a push authenticated with GITHUB_TOKEN does NOT trigger other
+# workflows (GitHub's anti-recursion rule), so ci.yml would never run. Pushing
+# with the App token triggers ci.yml (on: push: tags: ['v*.*.*']) which builds
 # and publishes the image to GHCR with version tags (X.Y.Z + X.Y.Z-php8.5.5-alpine3.23).
+#
+# Required repo secrets: RELEASE_APP_ID + RELEASE_APP_PRIVATE_KEY, from a GitHub
+# App installed on this repo with `Contents: write` permission.
 on:
   workflow_dispatch:
     inputs:
@@ -20,7 +26,7 @@ on:
         type: string
 
 permissions:
-  contents: write     # required to create + push tags
+  contents: read      # the App token (not GITHUB_TOKEN) pushes the tag
   actions: read       # required to read CI run status
 
 jobs:
@@ -36,10 +42,18 @@ jobs:
           fi
           echo "Version format OK: ${{ inputs.version }}"
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v6.0.3
         with:
           ref: trunk
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Refuse if tag already exists
         run: |
