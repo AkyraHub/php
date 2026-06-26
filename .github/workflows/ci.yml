@@ -1,21 +1,70 @@
 name: CI
 
+# Single pipeline for both continuous integration AND releases.
+#
+# - pull_request        : lint + build + Trivy scan (nothing published)
+# - push to trunk       : the above + publish the floating tags (8, 8.5, 8.5.5-alpine3.23)
+# - workflow_dispatch   : same jobs; if `release_version` (vX.Y.Z) is provided, the run
+#                         validates it, builds+scans (the usual gates), then publishes the
+#                         version image tags AND pushes the git tag. The release is just
+#                         the CI pipeline with an extra input — no separate workflow, no
+#                         duplicated build.
+#
+# To cut a release: Actions → CI → Run workflow → fill in `release_version` (e.g. v1.0.1).
 on:
   pull_request:
     branches: [trunk]
   push:
     branches: [trunk]
-    tags: ['v*.*.*']
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Optional: cut a release (format vMAJOR.MINOR.PATCH, e.g. v1.0.1). Leave empty for a plain CI run.'
+        required: false
+        type: string
+        default: ''
 
 # Cancel in-flight runs on the same ref (PR rebases, push-after-push).
-# Don't cancel runs on trunk/tag (those publish artifacts we want to finish).
+# Don't cancel runs on trunk (those publish the floating tags we want to finish).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Release gate: only does work when release_version is set. On plain CI runs all
+  # steps are skipped and the job succeeds, so the pipeline below proceeds unchanged.
+  validate-release:
+    name: Validate release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Validate version format
+        if: inputs.release_version != ''
+        run: |
+          if [[ ! "${{ inputs.release_version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::release_version must match vMAJOR.MINOR.PATCH (e.g. v1.0.1). Got: '${{ inputs.release_version }}'"
+            exit 1
+          fi
+          echo "Release version format OK: ${{ inputs.release_version }}"
+
+      - uses: actions/checkout@v6.0.3
+        if: inputs.release_version != ''
+        with:
+          ref: trunk
+          fetch-depth: 0
+
+      - name: Refuse if tag already exists
+        if: inputs.release_version != ''
+        run: |
+          if git rev-parse "${{ inputs.release_version }}" >/dev/null 2>&1; then
+            echo "::error::Tag '${{ inputs.release_version }}' already exists. Choose a different version."
+            exit 1
+          fi
+          echo "Tag does not exist yet, OK to proceed."
+
   lint:
+    needs: validate-release
     uses: ./.github/workflows/_lint.yml
     permissions:
       contents: read
@@ -23,7 +72,34 @@ jobs:
   build-scan-push:
     needs: lint
     uses: ./.github/workflows/_build-scan-push.yml
+    with:
+      # Empty on PR/push (floating-tag behavior); set on a release dispatch
+      # → publishes X.Y.Z + X.Y.Z-php8.5.5-alpine3.23 instead.
+      release_version: ${{ inputs.release_version }}
     permissions:
       contents: read
       packages: write       # GHCR push
     secrets: inherit
+
+  # Git tag for the released commit. Runs only on a release dispatch, after the
+  # image is published. The tag needs no workflow trigger, so GITHUB_TOKEN is fine.
+  tag-release:
+    name: Tag release
+    needs: build-scan-push
+    if: inputs.release_version != ''
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: trunk
+          fetch-depth: 0
+
+      - name: Create and push annotated tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ inputs.release_version }}" -m "Release ${{ inputs.release_version }}"
+          git push origin "${{ inputs.release_version }}"
+          echo "::notice::Released ${{ inputs.release_version }} → image ghcr.io/akyrahub/php:${{ inputs.release_version }} (without the leading v) + git tag pushed."

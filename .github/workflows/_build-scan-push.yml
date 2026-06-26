@@ -7,7 +7,8 @@ name: _build-scan-push (reusable)
 #        - publishes results to GitHub Step Summary (no Code Scanning needed)
 #        - uploads JSON/SARIF/table as workflow artifact (30 days retention)
 #        - fails the job if any CRITICAL/HIGH found
-#   4. On push/tag events: re-uses the scan build (full cache hit) and pushes to GHCR
+#   4. On publish events (trunk push, or a release via `release_version`):
+#      re-uses the scan build (full cache hit) and pushes to GHCR
 #
 # amd64-only: FTDA prod runs on x86_64 / amd64, dev team is on Intel Mac (amd64).
 # Adding arm64 would require either ~25min QEMU emulation per build or a paid
@@ -15,6 +16,12 @@ name: _build-scan-push (reusable)
 # when an arm64 consumer exists (Graviton migration, Apple Silicon dev share).
 on:
   workflow_call:
+    inputs:
+      release_version:
+        description: 'When set (vX.Y.Z), publish the version image tags instead of the floating trunk tags. Empty on normal trunk CI.'
+        type: string
+        required: false
+        default: ''
 
 env:
   REGISTRY: ghcr.io
@@ -38,9 +45,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Strip the leading "v" from the release version (git tag v1.0.1 -> image 1.0.1).
+      # Empty when not a release, which disables the version tags below.
+      - name: Compute release image tag
+        id: relver
+        run: echo "clean=${RAW#v}" >> "$GITHUB_OUTPUT"
+        env:
+          RAW: ${{ inputs.release_version }}
+
       # Tagging scheme:
-      # - push trunk: floating tags 8, 8.5, 8.5.5-alpine3.23
-      # - tag v*.*.*: version tag + full discriminant
+      # - release (release_version set): X.Y.Z + X.Y.Z-php8.5.5-alpine3.23
+      # - push trunk (release_version empty): floating tags 8, 8.5, 8.5.5-alpine3.23
       # Never :latest (project decision).
       - name: Extract metadata
         id: meta
@@ -50,11 +65,11 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{version}}-php8.5.5-alpine3.23
-            type=raw,value=8,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') }}
-            type=raw,value=8.5,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') }}
-            type=raw,value=8.5.5-alpine3.23,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') }}
+            type=raw,value=${{ steps.relver.outputs.clean }},enable=${{ inputs.release_version != '' }}
+            type=raw,value=${{ steps.relver.outputs.clean }}-php8.5.5-alpine3.23,enable=${{ inputs.release_version != '' }}
+            type=raw,value=8,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') && inputs.release_version == '' }}
+            type=raw,value=8.5,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') && inputs.release_version == '' }}
+            type=raw,value=8.5.5-alpine3.23,enable=${{ github.ref == format('refs/heads/{0}', 'trunk') && inputs.release_version == '' }}
           labels: |
             org.opencontainers.image.title=php
             org.opencontainers.image.description=Minimal PHP-FPM base image for AkyraHub projects
@@ -83,7 +98,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            IMAGE_VERSION=${{ github.ref_name }}
+            IMAGE_VERSION=${{ inputs.release_version != '' && inputs.release_version || github.ref_name }}
 
       # Trivy with exit-code: 0 so we collect the full report regardless of
       # findings; the trivy-postprocess composite action decides pass/fail
@@ -122,4 +137,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            IMAGE_VERSION=${{ github.ref_name }}
+            IMAGE_VERSION=${{ inputs.release_version != '' && inputs.release_version || github.ref_name }}
