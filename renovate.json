@@ -40,14 +40,14 @@
   ],
   "regexManagers": [
     {
-      "description": "Pin Alpine apk packages in Dockerfile (pkg=~X.Y syntax)",
+      "description": "Pin Alpine apk packages in Dockerfile (pkg=X.Y.Z-rN syntax)",
       "fileMatch": ["(^|/)Dockerfile$"],
       "matchStrings": [
-        "(?<depName>[a-zA-Z0-9._-]+)=~(?<currentValue>\\d+\\.\\d+)"
+        "(?<depName>[a-zA-Z0-9._-]+)=(?<currentValue>\\d[\\w.]*-r\\d+)"
       ],
       "datasourceTemplate": "repology",
       "versioningTemplate": "loose",
-      "registryUrlTemplate": "https://repology.org/api/v1/project/{{depName}}/alpine_3_23"
+      "packageNameTemplate": "alpine_3_23/{{{depName}}}"
     },
     {
       "description": "PECL packages (pecl install pkg-X.Y.Z)",
