@@ -15,15 +15,16 @@ ENV TZ=Europe/Paris
 RUN set -eux \
     && apk upgrade --no-cache \
     && apk add --no-cache \
-         bash=~5.3 \
-         icu-libs=~76.1 \
-         libpq=~18.4 \
-         libzip=~1.11 \
-         libpng=~1.6 \
-         libjpeg-turbo=~3.1 \
-         freetype=~2.14 \
-         fcgi=~2.4 \
-         tzdata=~2026 \
+         bash=5.3.3-r1 \
+         icu-libs=76.1-r1 \
+         icu-data-full=76.1-r1 \
+         libpq=18.6-r0 \
+         libzip=1.11.4-r1 \
+         libpng=1.6.58-r1 \
+         libjpeg-turbo=3.1.2-r0 \
+         freetype=2.14.3-r0 \
+         fcgi=2.4.6-r0 \
+         tzdata=2026c-r0 \
     && cp /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
     && wget -qO /usr/local/bin/php-fpm-healthcheck \
@@ -34,13 +35,13 @@ RUN set -eux \
 RUN set -eux \
     && apk add --no-cache --virtual .build-deps \
          $PHPIZE_DEPS \
-         icu-dev=~76.1 \
-         postgresql18-dev=~18.4 \
-         libzip-dev=~1.11 \
-         libpng-dev=~1.6 \
-         libjpeg-turbo-dev=~3.1 \
-         freetype-dev=~2.14 \
-         linux-headers=~6.16 \
+         icu-dev=76.1-r1 \
+         postgresql18-dev=18.6-r0 \
+         libzip-dev=1.11.4-r1 \
+         libpng-dev=1.6.58-r1 \
+         libjpeg-turbo-dev=3.1.2-r0 \
+         freetype-dev=2.14.3-r0 \
+         linux-headers=6.16.12-r0 \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
          intl \
