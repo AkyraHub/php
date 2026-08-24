@@ -1,4 +1,4 @@
-ARG PHP_VERSION=8.5.5
+ARG PHP_VERSION=8.5.9
 ARG ALPINE_VERSION=3.23
 
 FROM php:${PHP_VERSION}-fpm-alpine${ALPINE_VERSION}
@@ -28,7 +28,7 @@ RUN set -eux \
     && cp /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
     && wget -qO /usr/local/bin/php-fpm-healthcheck \
-         https://raw.githubusercontent.com/renatomefi/php-fpm-healthcheck/v0.5.0/php-fpm-healthcheck \
+         https://raw.githubusercontent.com/renatomefi/php-fpm-healthcheck/v0.6.0/php-fpm-healthcheck \
     && chmod +x /usr/local/bin/php-fpm-healthcheck \
     && rm -rf /var/cache/apk/*
 
