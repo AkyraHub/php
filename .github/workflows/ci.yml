@@ -48,7 +48,7 @@ jobs:
           fi
           echo "Release version format OK: ${{ inputs.release_version }}"
 
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v6.1.0
         if: inputs.release_version != ''
         with:
           ref: trunk
@@ -91,7 +91,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v6.1.0
         with:
           ref: trunk
           fetch-depth: 0
