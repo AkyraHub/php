@@ -38,42 +38,38 @@
       "automerge": false
     }
   ],
-  "regexManagers": [
+  "customManagers": [
     {
+      "customType": "regex",
       "description": "Pin Alpine apk packages in Dockerfile (pkg=X.Y.Z-rN syntax)",
-      "fileMatch": ["(^|/)Dockerfile$"],
-      "matchStrings": [
-        "(?<depName>[a-zA-Z0-9._-]+)=(?<currentValue>\\d[\\w.]*-r\\d+)"
-      ],
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": ["(?<depName>[a-zA-Z0-9._-]+)=(?<currentValue>\\d[\\w.]*-r\\d+)"],
       "datasourceTemplate": "repology",
       "versioningTemplate": "loose",
       "packageNameTemplate": "alpine_3_23/{{{depName}}}"
     },
     {
+      "customType": "regex",
       "description": "PECL packages (pecl install pkg-X.Y.Z)",
-      "fileMatch": ["(^|/)Dockerfile$"],
-      "matchStrings": [
-        "pecl install (?<depName>[a-zA-Z0-9_-]+)-(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": ["pecl install (?<depName>[a-zA-Z0-9_-]+)-(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "pecl",
       "versioningTemplate": "semver"
     },
     {
+      "customType": "regex",
       "description": "php-fpm-healthcheck URL pinned to a release tag",
-      "fileMatch": ["(^|/)Dockerfile$"],
-      "matchStrings": [
-        "renatomefi/php-fpm-healthcheck/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
-      ],
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": ["renatomefi/php-fpm-healthcheck/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "renatomefi/php-fpm-healthcheck",
       "versioningTemplate": "semver"
     },
     {
+      "customType": "regex",
       "description": "Base PHP image ARG (PHP_VERSION + ALPINE_VERSION)",
-      "fileMatch": ["(^|/)Dockerfile$"],
-      "matchStrings": [
-        "ARG PHP_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"
-      ],
+      "managerFilePatterns": ["/(^|/)Dockerfile$/"],
+      "matchStrings": ["ARG PHP_VERSION=(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "docker",
       "depNameTemplate": "php",
       "versioningTemplate": "docker"
