@@ -35,7 +35,7 @@ jobs:
   # steps are skipped and the job succeeds, so the pipeline below proceeds unchanged.
   validate-release:
     name: Validate release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -87,7 +87,7 @@ jobs:
     name: Tag release
     needs: build-scan-push
     if: inputs.release_version != ''
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
