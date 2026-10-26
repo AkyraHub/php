@@ -1,4 +1,4 @@
-ARG PHP_VERSION=8.5.11
+ARG PHP_VERSION=8.5.12
 ARG ALPINE_VERSION=3.23
 
 FROM php:${PHP_VERSION}-fpm-alpine${ALPINE_VERSION}
@@ -20,11 +20,11 @@ RUN set -eux \
          icu-data-full=76.1-r1 \
          libpq=18.6-r0 \
          libzip=1.11.4-r1 \
-         libpng=1.6.58-r1 \
+         libpng=1.6.59-r0 \
          libjpeg-turbo=3.1.2-r0 \
          freetype=2.14.3-r0 \
          fcgi=2.4.6-r0 \
-         tzdata=2026c-r0 \
+         tzdata=2026e-r0 \
     && cp /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
     && wget -qO /usr/local/bin/php-fpm-healthcheck \
@@ -38,7 +38,7 @@ RUN set -eux \
          icu-dev=76.1-r1 \
          postgresql18-dev=18.6-r0 \
          libzip-dev=1.11.4-r1 \
-         libpng-dev=1.6.58-r1 \
+         libpng-dev=1.6.59-r0 \
          libjpeg-turbo-dev=3.1.2-r0 \
          freetype-dev=2.14.3-r0 \
          linux-headers=6.16.12-r0 \
